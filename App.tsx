@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SnakeGame } from './components/SnakeGame';
 import { GeminiLiveService } from './services/geminiLiveService';
 import { ControlAction, Direction, GameStatus } from './types';
-import { Mic, MicOff, Volume2, AlertTriangle, Smartphone } from 'lucide-react';
+import { Mic, MicOff, Volume2, AlertTriangle, Smartphone, Key } from 'lucide-react';
 
 const App: React.FC = () => {
   const [gameStatus, setGameStatus] = useState<GameStatus>(GameStatus.IDLE);
@@ -12,41 +12,55 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [isSecureContext, setIsSecureContext] = useState(true);
+  const [hasApiKey, setHasApiKey] = useState(true);
   
   const liveServiceRef = useRef<GeminiLiveService | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
-  // Check Secure Context on mount
+  // Check Secure Context and API Key on mount
   useEffect(() => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isHttps = window.location.protocol === 'https:';
     setIsSecureContext(isLocal || isHttps);
+
+    // Check if API Key is configured
+    if (!process.env.API_KEY) {
+      setHasApiKey(false);
+      setError("API Key is missing. Please configure it in Vercel settings.");
+    }
   }, []);
 
-  // Initialize Service (not connected yet)
+  // Initialize Service (only if API Key exists)
   useEffect(() => {
-    liveServiceRef.current = new GeminiLiveService({
-      onControlAction: (action) => {
-        handleControlAction(action);
-      },
-      onStatusChange: (connected) => {
-        setIsConnected(connected);
-        if (!connected) {
-            setAudioLevel(0);
-            releaseWakeLock();
-        } else {
-            requestWakeLock();
+    if (!process.env.API_KEY) return;
+
+    try {
+      liveServiceRef.current = new GeminiLiveService({
+        onControlAction: (action) => {
+          handleControlAction(action);
+        },
+        onStatusChange: (connected) => {
+          setIsConnected(connected);
+          if (!connected) {
+              setAudioLevel(0);
+              releaseWakeLock();
+          } else {
+              requestWakeLock();
+          }
+        },
+        onError: (err) => {
+          setError(err);
+          setIsConnected(false);
+        },
+        onAudioData: (level) => {
+          // Smooth dampening for visualization
+          setAudioLevel(prev => prev * 0.8 + level * 0.2);
         }
-      },
-      onError: (err) => {
-        setError(err);
-        setIsConnected(false);
-      },
-      onAudioData: (level) => {
-        // Smooth dampening for visualization
-        setAudioLevel(prev => prev * 0.8 + level * 0.2);
-      }
-    });
+      });
+    } catch (e: any) {
+      console.error("Failed to init service", e);
+      setError(e.message);
+    }
 
     return () => {
       liveServiceRef.current?.stop();
@@ -109,6 +123,33 @@ const App: React.FC = () => {
     setGameStatus(GameStatus.GAME_OVER);
     setScore(finalScore);
   };
+
+  // Render Missing API Key Screen
+  if (!hasApiKey) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-slate-800 p-8 rounded-2xl border border-red-500/50 shadow-2xl max-w-md w-full">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Key className="w-8 h-8 text-red-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-4">API Key Missing</h1>
+          <p className="text-slate-300 mb-6 leading-relaxed">
+            The app cannot start because the <code>API_KEY</code> environment variable is not set.
+          </p>
+          <div className="bg-slate-900 p-4 rounded-lg text-left text-sm text-slate-400 font-mono mb-6">
+            1. Go to Vercel Project Settings<br/>
+            2. Environment Variables<br/>
+            3. Key: API_KEY<br/>
+            4. Value: AIzaSy...<br/>
+            5. <strong>Redeploy</strong>
+          </div>
+          <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="block w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+            Go to Vercel Dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-2 sm:p-4 touch-none">
