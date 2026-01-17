@@ -9,7 +9,7 @@ interface SnakeGameProps {
 }
 
 const GRID_SIZE = 20;
-const TICK_RATE = 150; // ms per frame
+const TICK_RATE = 400; // Increased to 400ms to better handle voice API latency
 
 export const SnakeGame: React.FC<SnakeGameProps> = ({ status, direction, onGameOver, onScoreUpdate }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,6 +19,7 @@ export const SnakeGame: React.FC<SnakeGameProps> = ({ status, direction, onGameO
   
   // Keep track of the *requested* direction from props, but apply it on tick to avoid 180 turns
   const requestedDirRef = useRef<Direction>(Direction.RIGHT);
+  const prevStatusRef = useRef<GameStatus>(status);
 
   // Sync props to ref
   useEffect(() => {
@@ -48,16 +49,29 @@ export const SnakeGame: React.FC<SnakeGameProps> = ({ status, direction, onGameO
     return newFood;
   }, []);
 
-  // Reset game when status changes to PLAYING from IDLE/GAMEOVER
+  // Internal reset function
+  const resetGame = useCallback(() => {
+    setSnake([{ x: 10, y: 10 }]);
+    setFood({ x: 15, y: 15 });
+    setCurrentDir(Direction.RIGHT);
+    requestedDirRef.current = Direction.RIGHT;
+  }, []);
+
+  // Handle Game Status Changes (Start/Restart/Reset)
   useEffect(() => {
+    // 1. Reset if we go to IDLE (initial load or explicit stop)
     if (status === GameStatus.IDLE) {
-      setSnake([{ x: 10, y: 10 }]);
-      setFood({ x: 15, y: 15 });
-      setCurrentDir(Direction.RIGHT);
-      requestedDirRef.current = Direction.RIGHT;
+      resetGame();
       onScoreUpdate(0);
+    } 
+    // 2. Reset if we RESTART (Transition from GAME_OVER to PLAYING)
+    else if (status === GameStatus.PLAYING && prevStatusRef.current === GameStatus.GAME_OVER) {
+      resetGame();
+      // Note: Score is usually reset by App.tsx, but visual reset happens here
     }
-  }, [status, onScoreUpdate, generateFood]);
+
+    prevStatusRef.current = status;
+  }, [status, resetGame, onScoreUpdate]);
 
   // Game Loop
   useEffect(() => {
