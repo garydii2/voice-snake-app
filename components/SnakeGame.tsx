@@ -199,23 +199,24 @@ export const SnakeGame: React.FC<SnakeGameProps> = ({ status, direction, onGameO
   }, [snake, food, currentDir]);
 
   return (
-    <div className="relative rounded-xl overflow-hidden shadow-2xl border-4 border-slate-700">
+    <div className="relative rounded-xl overflow-hidden shadow-2xl border-4 border-slate-700 w-full aspect-square max-w-[400px] mx-auto">
         <canvas 
             ref={canvasRef} 
             width={400} 
             height={400}
-            className="block max-w-full"
+            className="block w-full h-full"
+            style={{ touchAction: 'none' }}
         />
         {status === GameStatus.GAME_OVER && (
             <div className="absolute inset-0 bg-black/70 flex items-center justify-center flex-col animate-fade-in">
-                <h2 className="text-4xl font-arcade text-red-500 mb-4">GAME OVER</h2>
-                <p className="text-white text-lg mb-8">Say "Start" to play again</p>
+                <h2 className="text-3xl sm:text-4xl font-arcade text-red-500 mb-4">GAME OVER</h2>
+                <p className="text-white text-sm sm:text-lg mb-8">Say "Start" to play again</p>
             </div>
         )}
         {status === GameStatus.IDLE && (
              <div className="absolute inset-0 bg-black/60 flex items-center justify-center flex-col backdrop-blur-sm">
-             <h2 className="text-3xl font-arcade text-green-400 mb-4 text-center px-4">VOICE SNAKE</h2>
-             <p className="text-white text-md bg-slate-800 px-4 py-2 rounded-full border border-slate-600">
+             <h2 className="text-2xl sm:text-3xl font-arcade text-green-400 mb-4 text-center px-4">VOICE SNAKE</h2>
+             <p className="text-white text-sm sm:text-md bg-slate-800 px-4 py-2 rounded-full border border-slate-600">
                Connect Mic & Say "Start"
              </p>
          </div>

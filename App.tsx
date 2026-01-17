@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SnakeGame } from './components/SnakeGame';
 import { GeminiLiveService } from './services/geminiLiveService';
 import { ControlAction, Direction, GameStatus } from './types';
-import { Mic, MicOff, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Volume2, AlertTriangle, Smartphone } from 'lucide-react';
 
 const App: React.FC = () => {
   const [gameStatus, setGameStatus] = useState<GameStatus>(GameStatus.IDLE);
@@ -11,8 +11,17 @@ const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [isSecureContext, setIsSecureContext] = useState(true);
   
   const liveServiceRef = useRef<GeminiLiveService | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  // Check Secure Context on mount
+  useEffect(() => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isHttps = window.location.protocol === 'https:';
+    setIsSecureContext(isLocal || isHttps);
+  }, []);
 
   // Initialize Service (not connected yet)
   useEffect(() => {
@@ -22,7 +31,12 @@ const App: React.FC = () => {
       },
       onStatusChange: (connected) => {
         setIsConnected(connected);
-        if (!connected) setAudioLevel(0);
+        if (!connected) {
+            setAudioLevel(0);
+            releaseWakeLock();
+        } else {
+            requestWakeLock();
+        }
       },
       onError: (err) => {
         setError(err);
@@ -36,8 +50,27 @@ const App: React.FC = () => {
 
     return () => {
       liveServiceRef.current?.stop();
+      releaseWakeLock();
     };
   }, []);
+
+  const requestWakeLock = async () => {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLockRef.current = await navigator.wakeLock.request('screen');
+            console.log('Wake Lock active');
+        }
+    } catch (err) {
+        console.warn('Wake Lock request failed:', err);
+    }
+  };
+
+  const releaseWakeLock = () => {
+      if (wakeLockRef.current) {
+          wakeLockRef.current.release();
+          wakeLockRef.current = null;
+      }
+  };
 
   const handleControlAction = (action: ControlAction) => {
     console.log('Received Action:', action);
@@ -78,40 +111,55 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-2 sm:p-4 touch-none">
+      
+      {!isSecureContext && (
+          <div className="w-full max-w-2xl mb-4 bg-amber-500/10 border border-amber-500/50 text-amber-200 p-3 rounded-lg flex items-start gap-3 text-sm">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <div>
+                  <p className="font-bold">Microphone Access Warning</p>
+                  <p>Your browser may block microphone access because this page is not served via <strong>HTTPS</strong> or <strong>localhost</strong>.</p>
+                  <p className="mt-1 opacity-80">To run on mobile, please deploy to a secure host (like Vercel) or use a secure tunnel.</p>
+              </div>
+          </div>
+      )}
+
       {/* Header */}
-      <header className="w-full max-w-2xl flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-700">
+      <header className="w-full max-w-2xl flex justify-between items-center mb-4 sm:mb-8 bg-slate-800 p-3 sm:p-4 rounded-2xl shadow-lg border border-slate-700">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center shadow-inner">
+          <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center shadow-inner shrink-0">
             <Volume2 className="text-white w-6 h-6" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white font-arcade">GEMINI SNAKE</h1>
-            <p className="text-xs text-slate-400">Powered by Gemini Live API</p>
+          <div className="overflow-hidden">
+            <h1 className="text-lg sm:text-xl font-bold text-white font-arcade whitespace-nowrap overflow-ellipsis">GEMINI SNAKE</h1>
+            <p className="text-[10px] sm:text-xs text-slate-400">Powered by Gemini Live API</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-             <div className="text-right hidden sm:block">
-                <p className="text-xs text-slate-400 uppercase">Score</p>
-                <p className="text-2xl font-mono text-green-400 font-bold">{score.toString().padStart(3, '0')}</p>
+        <div className="flex items-center gap-2 sm:gap-4">
+             <div className="text-right hidden xs:block">
+                <p className="text-[10px] sm:text-xs text-slate-400 uppercase">Score</p>
+                <p className="text-xl sm:text-2xl font-mono text-green-400 font-bold">{score.toString().padStart(3, '0')}</p>
              </div>
 
             <button
                 onClick={toggleConnection}
-                className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all transform active:scale-95 ${
-                isConnected
-                    ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]'
-                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_0_15px_rgba(79,70,229,0.5)]'
+                disabled={!isSecureContext}
+                className={`flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-full font-bold transition-all transform active:scale-95 text-sm sm:text-base ${
+                !isSecureContext 
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : isConnected
+                        ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_0_15px_rgba(79,70,229,0.5)]'
                 }`}
             >
                 {isConnected ? (
                 <>
-                    <MicOff className="w-5 h-5" /> Stop
+                    <MicOff className="w-4 h-4 sm:w-5 sm:h-5" /> <span className="hidden sm:inline">Stop</span>
                 </>
                 ) : (
                 <>
-                    <Mic className="w-5 h-5" /> Start Voice
+                    <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> <span className="hidden sm:inline">Start</span><span className="inline sm:hidden">Mic</span>
                 </>
                 )}
             </button>
@@ -119,7 +167,11 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Game Area */}
-      <main className="relative group">
+      <main className="relative group w-full max-w-md">
+        <div className="flex justify-between items-center sm:hidden mb-2 px-1">
+             <span className="text-xs text-slate-400">SCORE: <span className="text-green-400 font-mono text-base">{score}</span></span>
+        </div>
+
         <SnakeGame 
             status={gameStatus} 
             direction={currentDirection} 
@@ -133,7 +185,7 @@ const App: React.FC = () => {
                 {[...Array(5)].map((_, i) => (
                      <div 
                         key={i}
-                        className="w-2 bg-indigo-500 rounded-full transition-all duration-75"
+                        className="w-1.5 sm:w-2 bg-indigo-500 rounded-full transition-all duration-75"
                         style={{
                             height: isConnected ? `${Math.max(10, Math.min(100, audioLevel * 500 * (Math.random() + 0.5)))}%` : '20%',
                             opacity: isConnected ? 1 : 0.5
@@ -145,22 +197,27 @@ const App: React.FC = () => {
       </main>
 
       {/* Instructions */}
-      <div className="mt-16 grid grid-cols-2 gap-4 max-w-lg w-full text-slate-400 text-sm">
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-             <p className="font-bold text-slate-200 mb-1">Commands (English)</p>
+      <div className="mt-12 sm:mt-16 grid grid-cols-2 gap-2 sm:gap-4 max-w-lg w-full text-slate-400 text-xs sm:text-sm">
+        <div className="bg-slate-800 p-3 sm:p-4 rounded-xl border border-slate-700 text-center">
+             <p className="font-bold text-slate-200 mb-1">Commands (EN)</p>
              <p>Up, Down, Left, Right</p>
-             <p>Start, Stop, Restart</p>
+             <p>Start, Stop</p>
         </div>
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
+        <div className="bg-slate-800 p-3 sm:p-4 rounded-xl border border-slate-700 text-center">
              <p className="font-bold text-slate-200 mb-1">Commands (中文)</p>
              <p>上, 下, 左, 右</p>
              <p>开始, 停止</p>
         </div>
       </div>
+
+      <div className="mt-8 text-slate-600 text-[10px] flex items-center gap-1">
+         <Smartphone className="w-3 h-3" />
+         <span>Install on mobile: Menu &gt; Add to Home Screen</span>
+      </div>
       
       {/* Error Toast */}
       {error && (
-        <div className="fixed bottom-4 right-4 bg-red-900 text-red-100 px-4 py-3 rounded-lg border border-red-700 shadow-xl max-w-md animate-bounce">
+        <div className="fixed bottom-4 right-4 left-4 sm:left-auto bg-red-900 text-red-100 px-4 py-3 rounded-lg border border-red-700 shadow-xl max-w-md animate-bounce z-50">
             <p className="font-bold">Connection Error</p>
             <p className="text-sm">{error}</p>
         </div>
