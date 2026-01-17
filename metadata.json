@@ -1,0 +1,7 @@
+{
+  "name": "Gemini Voice Snake",
+  "description": "A classic Snake game controlled entirely by your voice using Gemini Live API. Say 'Up', 'Down', 'Left', 'Right', 'Start', or 'Stop'. Supports English and Chinese.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
